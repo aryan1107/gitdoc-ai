@@ -1,0 +1,523 @@
+{
+  "name": "gitdoc-ai",
+  "displayName": "GitDoc AI",
+  "description": "Automatically commit/push/pull changes on save with AI-generated commit messages powered by Claude, OpenAI, or Copilot",
+  "version": "0.1.1",
+  "publisher": "AryanChaurasia",
+  "icon": "icon.png",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aryan1107/gitdoc-ai"
+  },
+  "bugs": {
+    "url": "https://github.com/aryan1107/gitdoc-ai/issues"
+  },
+  "homepage": "https://github.com/aryan1107/gitdoc-ai#readme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "auto-commit",
+    "auto-save",
+    "claude",
+    "openai",
+    "copilot",
+    "ai",
+    "commit messages"
+  ],
+  "activationEvents": [
+    "workspaceContains:.git"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "views": {
+      "scm": [
+        {
+          "id": "gitdocAI.providers",
+          "name": "GitDoc AI Providers",
+          "when": "gitOpenRepositoryCount != 0"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "gitdocAI.enable",
+        "title": "GitDoc AI: Enable"
+      },
+      {
+        "command": "gitdocAI.disable",
+        "title": "GitDoc AI: Disable"
+      },
+      {
+        "command": "gitdocAI.commit",
+        "title": "GitDoc AI: Commit"
+      },
+      {
+        "command": "gitdocAI.signIn",
+        "title": "GitDoc AI: Sign In to AI Provider"
+      },
+      {
+        "command": "gitdocAI.signInClaude",
+        "title": "GitDoc AI: Sign In to Anthropic Claude"
+      },
+      {
+        "command": "gitdocAI.signInOpenAI",
+        "title": "GitDoc AI: Sign In to OpenAI"
+      },
+      {
+        "command": "gitdocAI.signOut",
+        "title": "GitDoc AI: Sign Out from AI Provider"
+      },
+      {
+        "command": "gitdocAI.selectProvider",
+        "title": "GitDoc AI: Select AI Provider"
+      },
+      {
+        "command": "gitdocAI.selectModel",
+        "title": "GitDoc AI: Select Model"
+      },
+      {
+        "command": "gitdocAI.setApiKey",
+        "title": "GitDoc AI: Set API Key"
+      },
+      {
+        "command": "gitdocAI.setClaudeApiKey",
+        "title": "GitDoc AI: Set Anthropic API Key"
+      },
+      {
+        "command": "gitdocAI.setOpenAIApiKey",
+        "title": "GitDoc AI: Set OpenAI API Key"
+      },
+      {
+        "command": "gitdocAI.openSettings",
+        "title": "GitDoc AI: Open Settings"
+      },
+      {
+        "command": "gitdocAI.showOutput",
+        "title": "GitDoc AI: Show Output"
+      },
+      {
+        "command": "gitdocAI.squashAbove",
+        "title": "Squash Version(s) Above"
+      },
+      {
+        "command": "gitdocAI.undoVersion",
+        "title": "Undo Version"
+      },
+      {
+        "command": "gitdocAI.restoreVersion",
+        "title": "Restore Version"
+      },
+      {
+        "command": "gitdocAI.treeSignIn",
+        "title": "Sign In",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "gitdocAI.treeSetApiKey",
+        "title": "Set API Key",
+        "icon": "$(key)"
+      },
+      {
+        "command": "gitdocAI.refreshProviders",
+        "title": "Refresh Providers",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitdocAI.manageProviders",
+        "title": "GitDoc AI: Manage Providers",
+        "icon": "$(settings-gear)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "gitdocAI.enable",
+          "when": "gitOpenRepositoryCount != 0 && !gitdocAI.enabled"
+        },
+        {
+          "command": "gitdocAI.disable",
+          "when": "gitOpenRepositoryCount != 0 && gitdocAI.enabled"
+        },
+        {
+          "command": "gitdocAI.commit",
+          "when": "gitOpenRepositoryCount != 0 && gitdocAI.enabled"
+        },
+        {
+          "command": "gitdocAI.selectProvider",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.selectModel",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.signIn",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.signOut",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.setApiKey",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.signInClaude",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.signInOpenAI",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.setClaudeApiKey",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.setOpenAIApiKey",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.openSettings",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.showOutput",
+          "when": "gitOpenRepositoryCount != 0"
+        },
+        {
+          "command": "gitdocAI.squashAbove",
+          "when": "false"
+        },
+        {
+          "command": "gitdocAI.undoVersion",
+          "when": "false"
+        },
+        {
+          "command": "gitdocAI.restoreVersion",
+          "when": "false"
+        },
+        {
+          "command": "gitdocAI.treeSignIn",
+          "when": "false"
+        },
+        {
+          "command": "gitdocAI.treeSetApiKey",
+          "when": "false"
+        },
+        {
+          "command": "gitdocAI.refreshProviders",
+          "when": "false"
+        },
+        {
+          "command": "gitdocAI.manageProviders",
+          "when": "gitOpenRepositoryCount != 0"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "gitdocAI.manageProviders",
+          "when": "view == gitdocAI.providers",
+          "group": "navigation"
+        },
+        {
+          "command": "gitdocAI.refreshProviders",
+          "when": "view == gitdocAI.providers",
+          "group": "navigation"
+        },
+        {
+          "command": "gitdocAI.openSettings",
+          "when": "view == gitdocAI.providers",
+          "group": "navigation"
+        }
+      ],
+      "timeline/item/context": [
+        {
+          "command": "gitdocAI.squashAbove",
+          "when": "timeline.uri && gitdocAI.enabled"
+        },
+        {
+          "command": "gitdocAI.undoVersion",
+          "when": "timeline.uri && gitdocAI.enabled"
+        },
+        {
+          "command": "gitdocAI.restoreVersion",
+          "when": "timeline.uri && gitdocAI.enabled"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "GitDoc AI",
+      "properties": {
+        "gitdocAI.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Specifies whether to automatically create a commit each time you save a file."
+        },
+        "gitdocAI.autoCommitDelay": {
+          "type": "number",
+          "default": 30000,
+          "description": "Controls the delay in ms after which any changes are automatically committed. Only applies when GitDoc AI is enabled."
+        },
+        "gitdocAI.autoPush": {
+          "type": "string",
+          "enum": [
+            "onCommit",
+            "afterDelay",
+            "off"
+          ],
+          "default": "onCommit",
+          "description": "Specifies whether to automatically push changes to the current remote."
+        },
+        "gitdocAI.autoPushDelay": {
+          "type": "number",
+          "default": 30000,
+          "description": "Controls the delay in ms after which any commits are automatically pushed. Only applies when Auto Push is set to 'afterDelay'."
+        },
+        "gitdocAI.autoPull": {
+          "type": "string",
+          "enum": [
+            "onPush",
+            "afterDelay",
+            "off"
+          ],
+          "default": "onPush",
+          "description": "Specifies whether to automatically pull changes from the current remote."
+        },
+        "gitdocAI.autoPullDelay": {
+          "type": "number",
+          "default": 30000,
+          "description": "Controls the delay in ms after which any changes are automatically pulled. Only applies when Auto Pull is set to 'afterDelay'."
+        },
+        "gitdocAI.commitMessageFormat": {
+          "type": "string",
+          "default": "ff",
+          "description": "Specifies the date/time format string (using Luxon) to use when generating auto-commit messages."
+        },
+        "gitdocAI.timeZone": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies the timezone for timestamp commit messages (tz database name, e.g. UTC, America/New_York). Leave empty to use local timezone."
+        },
+        "gitdocAI.commitValidationLevel": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "none"
+          ],
+          "default": "error",
+          "description": "Specifies whether to validate that a file is free of problems before attempting to commit changes to it."
+        },
+        "gitdocAI.commitOnClose": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to automatically commit changes when you close VS Code."
+        },
+        "gitdocAI.filePattern": {
+          "type": "string",
+          "default": "**/*",
+          "description": "Specifies a glob that indicates the specific files that should be automatically committed."
+        },
+        "gitdocAI.excludeBranches": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Specifies a list of branches that should be excluded from auto-commits."
+        },
+        "gitdocAI.pushMode": {
+          "type": "string",
+          "enum": [
+            "forcePush",
+            "forcePushWithLease",
+            "push"
+          ],
+          "default": "forcePush",
+          "description": "Specifies how changes should be pushed after they're committed. This setting only applies when auto-pushing is enabled."
+        },
+        "gitdocAI.pullOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to automatically pull remote changes when you open a repo."
+        },
+        "gitdocAI.noVerify": {
+          "type": "boolean",
+          "default": false,
+          "description": "Specifies whether to ignore any configured git hooks."
+        },
+        "gitdocAI.ai.manageProviders": {
+          "type": "null",
+          "markdownDescription": "**[Open Provider Manager](command:gitdocAI.manageProviders)** — View and manage all AI providers, authentication status, and models in one place."
+        },
+        "gitdocAI.ai.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Specifies whether to use AI to generate commit messages. When enabled, requires valid credentials for the selected provider; falls back to timestamps if unavailable."
+        },
+        "gitdocAI.ai.provider": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "openai",
+            "copilot"
+          ],
+          "enumDescriptions": [
+            "Anthropic Claude - Uses Claude models for commit message generation",
+            "OpenAI - Uses GPT/Codex models for commit message generation",
+            "GitHub Copilot - Uses Copilot's language model API (requires Copilot extension)"
+          ],
+          "default": "openai",
+          "description": "Specifies which AI provider to use for generating commit messages."
+        },
+        "gitdocAI.providers.claude.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Anthropic Claude as an available AI provider."
+        },
+        "gitdocAI.providers.openai.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable OpenAI as an available AI provider."
+        },
+        "gitdocAI.providers.copilot.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable GitHub Copilot as an available AI provider."
+        },
+        "gitdocAI.ai.model": {
+          "type": "string",
+          "default": "",
+          "description": "Global model override for all providers. Leave empty to use provider-specific model settings."
+        },
+        "gitdocAI.ai.claudeModel": {
+          "type": "string",
+          "default": "claude-sonnet-4-5-20250929",
+          "markdownDescription": "Claude model for commit message generation. Common models: `claude-sonnet-4-5-20250929`, `claude-opus-4-6`, `claude-haiku-4-5-20251001`. Use **GitDoc AI: Select Model** command for a full list fetched from the API."
+        },
+        "gitdocAI.ai.openaiModel": {
+          "type": "string",
+          "default": "gpt-4.1",
+          "markdownDescription": "OpenAI model for commit message generation. API key models: `gpt-4.1`, `gpt-5.2`, `gpt-5-mini`. Codex CLI models (login auth): `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.1-codex-mini`. Codex CLI ignores this setting unless explicitly changed. Use **GitDoc AI: Select Model** command for a full list."
+        },
+        "gitdocAI.ai.copilotModel": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Optional Copilot model family (for VS Code Language Model API). Leave empty for default. Use **GitDoc AI: Select Model** command to see available Copilot models."
+        },
+        "gitdocAI.ai.maxDiffChars": {
+          "type": "number",
+          "default": 200000,
+          "minimum": 500,
+          "description": "Maximum number of diff characters sent to AI providers. Larger values improve context but may increase latency/cost."
+        },
+        "gitdocAI.ai.requestTimeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 10000,
+          "description": "Maximum time in ms to wait for AI commit message generation before falling back to a timestamp commit message. CLI-based auth (Claude Code, Codex) may need longer due to process startup."
+        },
+        "gitdocAI.ai.customInstructions": {
+          "type": "string",
+          "default": "",
+          "description": "Specifies custom instructions to use when generating commit messages (e.g., 'use conventional commit syntax', 'use emojis')."
+        },
+        "gitdocAI.ai.useEmojis": {
+          "type": "boolean",
+          "default": false,
+          "description": "Specifies whether to prepend AI-generated commit messages with an emoji."
+        },
+        "gitdocAI.auth.method": {
+          "type": "string",
+          "enum": [
+            "apiKey",
+            "login"
+          ],
+          "enumDescriptions": [
+            "Use an API key for authentication",
+            "Sign in with your account (requires Pro/Plus subscription)"
+          ],
+          "default": "apiKey",
+          "description": "Legacy fallback authentication method. Prefer provider-specific auth settings below."
+        },
+        "gitdocAI.auth.claude.method": {
+          "type": "string",
+          "enum": [
+            "inherit",
+            "apiKey",
+            "login"
+          ],
+          "enumDescriptions": [
+            "Use the global GitDoc AI auth method",
+            "Use an Anthropic API key",
+            "Use Claude Code CLI authentication (auto-detects existing login)"
+          ],
+          "default": "inherit",
+          "description": "Authentication method for Anthropic Claude provider."
+        },
+        "gitdocAI.auth.openai.method": {
+          "type": "string",
+          "enum": [
+            "inherit",
+            "apiKey",
+            "login"
+          ],
+          "enumDescriptions": [
+            "Use the global GitDoc AI auth method",
+            "Use an OpenAI API key",
+            "Use Codex CLI authentication (auto-detects existing login)"
+          ],
+          "default": "inherit",
+          "description": "Authentication method for OpenAI provider."
+        },
+        "gitdocAI.output.logLevel": {
+          "type": "string",
+          "enum": [
+            "error",
+            "info",
+            "debug"
+          ],
+          "default": "debug",
+          "description": "Specifies how verbose GitDoc AI logging should be in the output channel."
+        },
+        "gitdocAI.output.showOnError": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically reveals the GitDoc AI output channel when an operation fails."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.7.1",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "luxon": "^3.4.4",
+    "minimatch": "^9.0.3",
+    "openai": "^4.77.0"
+  }
+}

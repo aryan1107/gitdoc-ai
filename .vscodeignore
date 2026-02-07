@@ -1,0 +1,16 @@
+.vscode/**
+.vscode-test/**
+.claude/**
+src/**
+node_modules/**
+out/**
+.gitignore
+.gitattributes
+tsconfig.json
+webpack.config.js
+plan.md
+calude-agent-doc.txt
+openai-codex-doc.txt
+sparkle.jpg
+**/*.map
+**/*.ts
