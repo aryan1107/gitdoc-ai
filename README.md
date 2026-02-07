@@ -24,8 +24,8 @@ Automatically commit, push, and pull changes on save with AI-generated commit me
 
 | Provider | Auth Methods | Default Model |
 |----------|-------------|---------------|
-| **OpenAI** | API Key, Codex CLI login | gpt-4.1 |
-| **Claude** | API Key, Claude Code CLI login | claude-sonnet-4-5 |
+| **OpenAI** | API Key, Codex CLI login | gpt-4.1 (API Key) / gpt-5.1-codex-mini (Codex CLI) |
+| **Claude** | API Key, Claude Code CLI login | claude-sonnet-4-5-20250929 |
 | **Copilot** | GitHub Copilot extension | default |
 
 ### Authentication
