@@ -2,7 +2,7 @@
   "name": "gitdoc-ai",
   "displayName": "GitDoc AI - Auto Commit with Codex & Claude",
   "description": "Automatically commit/push/pull changes on save with AI-generated commit messages powered by Claude, OpenAI, or Copilot",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "publisher": "AryanChaurasia",
   "icon": "icon.png",
   "license": "MIT",
@@ -435,6 +435,100 @@
           "type": "boolean",
           "default": false,
           "description": "Specifies whether to prepend AI-generated commit messages with an emoji."
+        },
+        "gitdocAI.ai.commitMessageStyle": {
+          "type": "string",
+          "enum": [
+            "simple",
+            "conventional",
+            "emoji",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "Simple descriptive messages (e.g., 'Add user authentication')",
+            "Conventional Commits format (e.g., 'feat: add user authentication')",
+            "Emoji-first messages (e.g., '✨ add user authentication')",
+            "Use only custom instructions from 'ai.customInstructions' setting"
+          ],
+          "default": "simple",
+          "markdownDescription": "Commit message style preset. **Simple**: Plain descriptions. **Conventional**: Uses feat/fix/docs/etc prefixes. **Emoji**: Starts with relevant emojis. **Custom**: Uses only your custom instructions."
+        },
+        "gitdocAI.ai.commitMessageLength": {
+          "type": "string",
+          "enum": [
+            "short",
+            "standard",
+            "detailed"
+          ],
+          "enumDescriptions": [
+            "Short messages (max 50 characters) - GitHub style",
+            "Standard messages (max 72 characters) - Git convention",
+            "Detailed messages (max 100 characters) - More descriptive"
+          ],
+          "default": "standard",
+          "description": "Maximum commit message length preference."
+        },
+        "gitdocAI.ai.diffContextDepth": {
+          "type": "number",
+          "enum": [
+            0,
+            1,
+            2,
+            5,
+            10
+          ],
+          "enumDescriptions": [
+            "No context - only staged changes",
+            "Include last 1 commit for context",
+            "Include last 2 commits for context",
+            "Include last 5 commits for context",
+            "Include last 10 commits for context"
+          ],
+          "default": 0,
+          "markdownDescription": "Number of recent commits to include as context when generating AI commit messages. More context helps AI understand the change pattern but increases processing time. **0**: Fastest, uses only staged changes."
+        },
+        "gitdocAI.ai.retryAttempts": {
+          "type": "number",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Number of times to retry AI commit message generation before falling back to timestamp. Minimum 1 (no retries), maximum 5."
+        },
+        "gitdocAI.ai.retryDelayMs": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 1000,
+          "maximum": 10000,
+          "description": "Delay in milliseconds between AI retry attempts. Minimum 1000ms (1 second), maximum 10000ms (10 seconds)."
+        },
+        "gitdocAI.autoCommit.minFilesChanged": {
+          "type": "number",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Minimum number of files that must be changed before auto-committing. Set to 1 to commit any change."
+        },
+        "gitdocAI.autoCommit.minLinesChanged": {
+          "type": "number",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Minimum number of lines (added + deleted) that must be changed before auto-committing. Set to 1 to commit any change."
+        },
+        "gitdocAI.notifications.onCommitSuccess": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show VS Code notification when a commit succeeds. Recommended: OFF to avoid notification spam."
+        },
+        "gitdocAI.notifications.onAIError": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show VS Code notification when AI commit message generation fails."
+        },
+        "gitdocAI.notifications.onPushPull": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show VS Code notifications for successful push/pull operations."
         },
         "gitdocAI.auth.method": {
           "type": "string",

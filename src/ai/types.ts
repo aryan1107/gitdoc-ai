@@ -3,6 +3,8 @@ export interface AIOptions {
   useEmojis?: boolean;
   model?: string;
   maxDiffChars?: number;
+  commitMessageStyle?: "simple" | "conventional" | "emoji" | "custom";
+  commitMessageLength?: "short" | "standard" | "detailed";
 }
 
 export interface AIModelInfo {

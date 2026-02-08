@@ -103,9 +103,76 @@ export async function getFullDiff(cwd: string): Promise<string> {
   return stdout.trim();
 }
 
+export async function getStagedDiffWithContext(
+  cwd: string,
+  contextDepth: number
+): Promise<string> {
+  // Get staged diff
+  const stagedDiff = await getStagedDiff(cwd);
+
+  // If no context requested, return staged diff only
+  if (contextDepth === 0) {
+    return stagedDiff;
+  }
+
+  try {
+    // Get diff from HEAD~N to HEAD for context
+    const commitRef = `HEAD~${contextDepth}`;
+    const { stdout: contextDiff } = await execGit(
+      ["diff", commitRef, "HEAD"],
+      cwd
+    );
+
+    // Combine context with staged changes
+    let combined = "";
+    if (contextDiff.trim()) {
+      combined += `# Recent changes (last ${contextDepth} commit${contextDepth > 1 ? "s" : ""}):\n${contextDiff}\n\n`;
+    }
+    if (stagedDiff.trim()) {
+      combined += `# Staged changes:\n${stagedDiff}`;
+    }
+
+    return combined || stagedDiff;
+  } catch (error) {
+    // If we can't get context (e.g., not enough commits), fall back to staged only
+    return stagedDiff;
+  }
+}
+
 export async function hasChanges(cwd: string): Promise<boolean> {
   const { stdout } = await execGit(["status", "--porcelain"], cwd);
   return stdout.trim().length > 0;
+}
+
+export async function getChangeStats(cwd: string): Promise<{ filesChanged: number; linesChanged: number }> {
+  try {
+    // Get numstat for staged changes
+    const { stdout } = await execGit(["diff", "--cached", "--numstat"], cwd);
+
+    const lines = stdout.trim().split("\n").filter(line => line);
+    const filesChanged = lines.length;
+
+    let linesChanged = 0;
+    for (const line of lines) {
+      const parts = line.split("\t");
+      const addedStr = parts[0];
+      const deletedStr = parts[1];
+
+      // Binary files show "-" for both added and deleted
+      if (addedStr === "-" || deletedStr === "-") {
+        // Count binary files as at least 1 line changed
+        linesChanged += 1;
+      } else {
+        const added = parseInt(addedStr) || 0;
+        const deleted = parseInt(deletedStr) || 0;
+        linesChanged += added + deleted;
+      }
+    }
+
+    return { filesChanged, linesChanged };
+  } catch (error) {
+    return { filesChanged: 0, linesChanged: 0 };
+  }
 }
 
 function parsePorcelainStatus(output: string): string[] {

@@ -11,7 +11,9 @@ import {
   hasRemote,
   hasUpstream,
   getStagedDiff,
+  getStagedDiffWithContext,
   getChangedFiles,
+  getChangeStats,
 } from "./gitUtils";
 import { AIManager } from "../ai/aiManager";
 import { normalizeCommitMessage } from "../ai/prompt";
@@ -189,8 +191,8 @@ export class GitManager implements vscode.Disposable {
 
       this.log(`Staging ${matchingFiles.length} file(s)...`, "debug");
 
-      // Stage the matching files
-      let stagedAny = false;
+      // Stage the matching files and track what we staged
+      const stagedFiles: string[] = [];
       for (const file of matchingFiles) {
         const normalizedPath = this.normalizeGitPath(file, cwd);
         if (!normalizedPath) {
@@ -199,7 +201,7 @@ export class GitManager implements vscode.Disposable {
         }
         try {
           await execGit(["add", "--", normalizedPath], cwd);
-          stagedAny = true;
+          stagedFiles.push(normalizedPath);
         } catch (error: any) {
           const message = String(error?.message || error);
           if (this.isSubmodulePathspecError(message)) {
@@ -227,19 +229,55 @@ export class GitManager implements vscode.Disposable {
         }
       }
 
-      if (!stagedAny) {
+      if (stagedFiles.length === 0) {
         this.log("No stageable files found for commit");
         this.onStatusChangeEmitter.fire("enabled");
         return false;
       }
+
+      // Check minimum change threshold
+      const stats = await getChangeStats(cwd);
+      const minFiles = config.minFilesChanged;
+      const minLines = config.minLinesChanged;
+
+      if (stats.filesChanged < minFiles) {
+        this.log(
+          `Skipping commit: only ${stats.filesChanged} file(s) changed (minimum: ${minFiles})`,
+          "debug"
+        );
+        // Unstage only the files we just staged (not user's manual staging)
+        await this.unstageFiles(stagedFiles, cwd);
+        this.onStatusChangeEmitter.fire("enabled");
+        return false;
+      }
+
+      if (stats.linesChanged < minLines) {
+        this.log(
+          `Skipping commit: only ${stats.linesChanged} line(s) changed (minimum: ${minLines})`,
+          "debug"
+        );
+        // Unstage only the files we just staged (not user's manual staging)
+        await this.unstageFiles(stagedFiles, cwd);
+        this.onStatusChangeEmitter.fire("enabled");
+        return false;
+      }
+
+      this.log(
+        `Change stats: ${stats.filesChanged} file(s), ${stats.linesChanged} line(s)`,
+        "debug"
+      );
 
       // Get staged diff after staging so newly added files are included.
       let diff = "";
       if (config.aiEnabled) {
         this.log("AI is enabled, getting staged diff...", "debug");
         try {
-          diff = await getStagedDiff(cwd);
-          this.log(`Staged diff length: ${diff.length} chars`, "debug");
+          const contextDepth = config.diffContextDepth;
+          diff = await getStagedDiffWithContext(cwd, contextDepth);
+          this.log(
+            `Staged diff length: ${diff.length} chars (context depth: ${contextDepth})`,
+            "debug"
+          );
         } catch (diffError: any) {
           const detail = diffError?.message || String(diffError);
           this.log(`Failed to get staged diff: ${detail}`, "error");
@@ -258,15 +296,7 @@ export class GitManager implements vscode.Disposable {
           );
         }
         this.log("Requesting AI commit message...");
-        try {
-          message = await this.aiManager.generateCommitMessage(diff);
-          this.log(`AI returned message: "${message}"`, "debug");
-        } catch (error: any) {
-          const detail = error?.message || String(error);
-          this.log(`AI commit message failed: ${detail}`, "error");
-          this.log("Falling back to timestamp message", "debug");
-          message = this.getTimestampMessage();
-        }
+        message = await this.generateCommitMessageWithRetry(diff);
       } else {
         message = this.getTimestampMessage();
       }
@@ -285,6 +315,11 @@ export class GitManager implements vscode.Disposable {
       await execGit(commitArgs, cwd);
 
       this.log(`Committed: ${message}`);
+
+      // Show notification if configured
+      if (config.notifyOnCommitSuccess) {
+        vscode.window.showInformationMessage(`GitDoc AI: Committed successfully`);
+      }
 
       // Auto-push if configured
       if (config.autoPush === "onCommit") {
@@ -342,6 +377,11 @@ export class GitManager implements vscode.Disposable {
       await execGit(pushArgs, cwd);
       this.log("Pushed changes");
 
+      // Show notification if configured
+      if (config.notifyOnPushPull) {
+        vscode.window.showInformationMessage(`GitDoc AI: Pushed changes`);
+      }
+
       // Auto-pull after push if configured
       if (config.autoPull === "onPush") {
         await this.pull(cwd);
@@ -379,6 +419,11 @@ export class GitManager implements vscode.Disposable {
 
       await execGit(["pull", "--rebase"], cwd);
       this.log("Pulled changes");
+
+      // Show notification if configured
+      if (config.notifyOnPushPull) {
+        vscode.window.showInformationMessage(`GitDoc AI: Pulled changes`);
+      }
 
       this.onStatusChangeEmitter.fire("enabled");
       return true;
@@ -492,6 +537,46 @@ export class GitManager implements vscode.Disposable {
     }
   }
 
+  private async generateCommitMessageWithRetry(diff: string): Promise<string> {
+    const maxAttempts = Math.max(1, config.retryAttempts);
+    const retryDelay = config.retryDelayMs;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        this.log(`AI attempt ${attempt}/${maxAttempts}...`, "debug");
+        const message = await this.aiManager.generateCommitMessage(diff);
+        this.log(`AI returned message: "${message}"`, "debug");
+        return message;
+      } catch (error: any) {
+        const detail = error?.message || String(error);
+        this.log(`AI attempt ${attempt}/${maxAttempts} failed: ${detail}`, "error");
+
+        if (config.notifyOnAIError && attempt === 1) {
+          vscode.window.showWarningMessage(
+            `GitDoc AI: Failed to generate commit message (attempt ${attempt}/${maxAttempts})`
+          );
+        }
+
+        if (attempt < maxAttempts) {
+          this.log(`Retrying in ${retryDelay}ms...`, "debug");
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+
+    // All attempts failed, fall back to timestamp
+    this.log(
+      `All ${maxAttempts} AI attempts failed. Falling back to timestamp message.`,
+      "error"
+    );
+    if (config.notifyOnAIError) {
+      vscode.window.showErrorMessage(
+        `GitDoc AI: All attempts failed. Using timestamp message.`
+      );
+    }
+    return this.getTimestampMessage();
+  }
+
   private getTimestampMessage(): string {
     const format = config.commitMessageFormat;
     const zone = config.timeZone.trim();
@@ -514,6 +599,34 @@ export class GitManager implements vscode.Disposable {
     }
 
     return relativePath;
+  }
+
+  private async unstageFiles(files: string[], cwd: string): Promise<void> {
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      // Try git reset HEAD -- <files> (works with commits)
+      await execGit(["reset", "HEAD", "--", ...files], cwd);
+      this.log(`Unstaged ${files.length} file(s)`, "debug");
+    } catch (error: any) {
+      // If HEAD doesn't exist (fresh repo, unborn HEAD), use git rm --cached
+      const message = String(error?.message || error);
+      if (message.includes("ambiguous argument 'HEAD'") ||
+          message.includes("unknown revision") ||
+          message.includes("bad revision")) {
+        this.log("Unborn HEAD detected, using rm --cached", "debug");
+        try {
+          await execGit(["rm", "--cached", "--", ...files], cwd);
+          this.log(`Unstaged ${files.length} file(s) via rm --cached`, "debug");
+        } catch (rmError) {
+          this.log(`Failed to unstage files: ${rmError}`, "error");
+        }
+      } else {
+        this.log(`Failed to unstage files: ${message}`, "error");
+      }
+    }
   }
 
   private isSubmodulePathspecError(message: string): boolean {

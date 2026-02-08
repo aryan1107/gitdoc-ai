@@ -9,6 +9,9 @@ export type AIProvider = "claude" | "openai" | "copilot";
 export type AuthMethod = "apiKey" | "login";
 export type ProviderAuthMethod = AuthMethod | "inherit";
 export type LogLevel = "error" | "info" | "debug";
+export type DiffContextDepth = 0 | 1 | 2 | 5 | 10;
+export type CommitMessageStyle = "simple" | "conventional" | "emoji" | "custom";
+export type CommitMessageLength = "short" | "standard" | "detailed";
 
 function getConfig() {
   return vscode.workspace.getConfiguration(EXTENSION_ID);
@@ -143,5 +146,46 @@ export const config = {
 
   get showOutputOnError(): boolean {
     return getConfig().get<boolean>("output.showOnError", true);
+  },
+
+  // New settings for enhanced features
+  get diffContextDepth(): DiffContextDepth {
+    return getConfig().get<DiffContextDepth>("ai.diffContextDepth", 0);
+  },
+
+  get commitMessageStyle(): CommitMessageStyle {
+    return getConfig().get<CommitMessageStyle>("ai.commitMessageStyle", "simple");
+  },
+
+  get commitMessageLength(): CommitMessageLength {
+    return getConfig().get<CommitMessageLength>("ai.commitMessageLength", "standard");
+  },
+
+  get minFilesChanged(): number {
+    return getConfig().get<number>("autoCommit.minFilesChanged", 1);
+  },
+
+  get minLinesChanged(): number {
+    return getConfig().get<number>("autoCommit.minLinesChanged", 1);
+  },
+
+  get retryAttempts(): number {
+    return getConfig().get<number>("ai.retryAttempts", 1);
+  },
+
+  get retryDelayMs(): number {
+    return getConfig().get<number>("ai.retryDelayMs", 2000);
+  },
+
+  get notifyOnCommitSuccess(): boolean {
+    return getConfig().get<boolean>("notifications.onCommitSuccess", false);
+  },
+
+  get notifyOnAIError(): boolean {
+    return getConfig().get<boolean>("notifications.onAIError", true);
+  },
+
+  get notifyOnPushPull(): boolean {
+    return getConfig().get<boolean>("notifications.onPushPull", false);
   },
 };

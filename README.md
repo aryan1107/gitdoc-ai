@@ -6,12 +6,17 @@ Automatically commit, push, and pull changes on save with AI-generated commit me
 
 - **Auto-commit on save** — Every file save triggers an automatic commit with an AI-generated message
 - **AI-powered commit messages** — Uses Claude, OpenAI, or Copilot to describe your changes
+- **Multiple commit styles** — Simple, Conventional Commits, Emoji-first, or fully custom
+- **Smart context** — Include recent commit history for better AI understanding
+- **Configurable thresholds** — Only commit when X files or Y lines changed
+- **Retry logic** — Automatically retry on AI failures before falling back
 - **Auto-push & auto-pull** — Keep your remote in sync automatically
 - **Multiple AI providers** — Choose between Anthropic Claude, OpenAI, or GitHub Copilot
 - **Flexible authentication** — API keys, CLI login (Claude Code / Codex), or Copilot extension
 - **Provider Manager** — Interactive panel to manage providers, auth status, and models
 - **Timeline integration** — Squash, undo, and restore versions from the VS Code timeline
-- **Configurable** — Custom commit delays, file patterns, branch exclusions, and more
+- **Smart notifications** — Customizable alerts for commits, errors, and sync operations
+- **Highly configurable** — Fine-tune delays, message length, context depth, and more
 
 ## Quick Start
 
@@ -53,6 +58,7 @@ Automatically commit, push, and pull changes on save with AI-generated commit me
 
 ## Settings
 
+### Core Settings
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `gitdocAI.enabled` | `false` | Enable auto-commit on save |
@@ -61,9 +67,31 @@ Automatically commit, push, and pull changes on save with AI-generated commit me
 | `gitdocAI.autoCommitDelay` | `30000` | Delay (ms) before auto-committing |
 | `gitdocAI.autoPush` | `onCommit` | When to auto-push (`onCommit`, `afterDelay`, `off`) |
 | `gitdocAI.autoPull` | `onPush` | When to auto-pull (`onPush`, `afterDelay`, `off`) |
-| `gitdocAI.ai.customInstructions` | `""` | Custom instructions for AI (e.g., "use conventional commits") |
 | `gitdocAI.filePattern` | `**/*` | Glob pattern for files to auto-commit |
 | `gitdocAI.excludeBranches` | `[]` | Branches to exclude from auto-commits |
+
+### AI Commit Message Settings
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `gitdocAI.ai.commitMessageStyle` | `simple` | Commit style: `simple`, `conventional`, `emoji`, or `custom` |
+| `gitdocAI.ai.commitMessageLength` | `standard` | Max length: `short` (50), `standard` (72), `detailed` (100) |
+| `gitdocAI.ai.customInstructions` | `""` | Custom instructions for AI (e.g., "use conventional commits") |
+| `gitdocAI.ai.diffContextDepth` | `0` | Include last N commits for context (0, 1, 2, 5, or 10) |
+| `gitdocAI.ai.retryAttempts` | `1` | Number of AI retry attempts before fallback (1-5) |
+| `gitdocAI.ai.retryDelayMs` | `2000` | Delay between retries in milliseconds |
+
+### Auto-Commit Thresholds
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `gitdocAI.autoCommit.minFilesChanged` | `1` | Minimum files changed to trigger commit |
+| `gitdocAI.autoCommit.minLinesChanged` | `1` | Minimum lines changed to trigger commit |
+
+### Notifications
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `gitdocAI.notifications.onCommitSuccess` | `false` | Show notification on successful commit |
+| `gitdocAI.notifications.onAIError` | `true` | Show notification on AI errors |
+| `gitdocAI.notifications.onPushPull` | `false` | Show notifications for push/pull |
 
 ## Requirements
 

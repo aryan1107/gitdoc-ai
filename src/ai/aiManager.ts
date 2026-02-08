@@ -47,6 +47,8 @@ export class AIManager implements vscode.Disposable {
       useEmojis: config.aiUseEmojis,
       model,
       maxDiffChars: config.aiMaxDiffChars,
+      commitMessageStyle: config.commitMessageStyle,
+      commitMessageLength: config.commitMessageLength,
     };
 
     this.log(

@@ -138,7 +138,34 @@ ${truncatedDiff}`;
   }
 
   private async execCodex(prompt: string, model?: string): Promise<string> {
-    const args = ["exec", "--skip-git-repo-check"];
+    // Try with --skip-git-repo-check first (newer Codex versions)
+    try {
+      return await this.execCodexWithArgs(prompt, model, true);
+    } catch (error: any) {
+      const errorMessage = error?.stderr?.toString().trim() || error.message || "";
+
+      // If the error is about unrecognized flag, retry without it
+      if (errorMessage.includes("--skip-git-repo-check") ||
+          errorMessage.includes("unknown flag") ||
+          errorMessage.includes("unrecognized")) {
+        // Older Codex CLI - retry without the flag
+        return await this.execCodexWithArgs(prompt, model, false);
+      }
+
+      // Other error - rethrow
+      throw error;
+    }
+  }
+
+  private async execCodexWithArgs(
+    prompt: string,
+    model: string | undefined,
+    useSkipRepoCheck: boolean
+  ): Promise<string> {
+    const args = ["exec"];
+    if (useSkipRepoCheck) {
+      args.push("--skip-git-repo-check");
+    }
     if (model) {
       args.push("--model", model);
     }

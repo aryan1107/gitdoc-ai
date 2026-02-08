@@ -440,11 +440,15 @@ export class AuthManager implements vscode.Disposable {
   }
 
   private async findCliPath(command: "codex" | "claude"): Promise<string | undefined> {
+    // Get merged env with login shell PATH for detection
+    const env = await this.getCliExecutionEnv();
+
     // Strategy 1: Try the command directly (simplest, works for most users)
     this.log(`CLI check: trying '${command}' directly`, "debug");
     try {
       await execFileAsync(command, ["--version"], {
         timeout: AUTH_CLI_TIMEOUT_MS,
+        env,
       });
       this.log(`CLI found: '${command}' works directly`, "debug");
       return command;
@@ -459,7 +463,7 @@ export class AuthManager implements vscode.Disposable {
     }
 
     // Strategy 2: Try 'which' command (common on macOS/Linux)
-    const fromWhich = await this.findCommandViaWhich(command);
+    const fromWhich = await this.findCommandViaWhich(command, env);
     if (fromWhich) {
       this.log(`CLI found via which: ${fromWhich}`, "debug");
       return fromWhich;
@@ -477,7 +481,8 @@ export class AuthManager implements vscode.Disposable {
   }
 
   private async findCommandViaWhich(
-    command: "codex" | "claude"
+    command: "codex" | "claude",
+    env: NodeJS.ProcessEnv
   ): Promise<string | undefined> {
     if (process.platform === "win32") {
       this.log(`Skipping 'which' on Windows`, "debug");
@@ -488,6 +493,7 @@ export class AuthManager implements vscode.Disposable {
     try {
       const { stdout } = await execFileAsync("which", [command], {
         timeout: AUTH_CLI_TIMEOUT_MS,
+        env,
       });
       const path = stdout.trim();
       this.log(`'which ${command}' returned: ${path || "(empty)"}`, "debug");
@@ -586,89 +592,6 @@ export class AuthManager implements vscode.Disposable {
           `CLI PATH probe failed (${shellPath}): ${this.formatExecError(error)}`,
           "debug"
         );
-      }
-    }
-
-    return undefined;
-  }
-
-  private async findCommandViaShell(
-    command: "codex" | "claude"
-  ): Promise<string | undefined> {
-    if (process.platform === "win32") {
-      return undefined;
-    }
-
-    const shells = Array.from(
-      new Set(
-        [process.env.SHELL, "/bin/zsh", "/bin/bash", "/bin/sh"].filter(
-          (value): value is string => typeof value === "string" && value.trim().length > 0
-        )
-      )
-    );
-
-    for (const shellPath of shells) {
-      const lookupCommand = `command -v ${command}`;
-      this.log(`CLI shell lookup command: ${shellPath} -lc "${lookupCommand}"`, "debug");
-      try {
-        const { stdout } = await execFileAsync(
-          shellPath,
-          ["-lc", lookupCommand],
-          { timeout: AUTH_CLI_TIMEOUT_MS }
-        );
-        this.log(
-          `CLI shell lookup stdout (${shellPath}): ${this.toSingleLine(stdout) || "(empty)"}`,
-          "debug"
-        );
-        const candidate = stdout.trim().split(/\r?\n/).pop()?.trim();
-        if (candidate && (path.isAbsolute(candidate) || candidate === command)) {
-          if (candidate === command) {
-            this.log(
-              `CLI shell lookup returned bare command '${command}', accepting as resolved.`,
-              "debug"
-            );
-            return command;
-          }
-          try {
-            await fs.access(candidate);
-            this.log(`CLI shell lookup resolved executable path: ${candidate}`, "debug");
-            return candidate;
-          } catch {
-            this.log(`CLI shell lookup candidate is not accessible: ${candidate}`, "debug");
-          }
-        }
-      } catch (error: any) {
-        this.log(
-          `CLI shell lookup failed (${shellPath}): ${this.formatExecError(error)}`,
-          "debug"
-        );
-      }
-    }
-
-    return undefined;
-  }
-
-  private async findInPath(
-    command: "codex" | "claude",
-    pathValue: string | undefined
-  ): Promise<string | undefined> {
-    const pathEntries = this.splitPath(pathValue);
-    const commandCandidates = this.getCommandCandidates(command);
-    this.log(
-      `CLI path scan for '${command}': entries=${pathEntries.length}, candidates=${commandCandidates.join(",")}`,
-      "debug"
-    );
-
-    for (const dir of pathEntries) {
-      for (const candidate of commandCandidates) {
-        const fullPath = path.join(dir, candidate);
-        try {
-          await fs.access(fullPath);
-          this.log(`CLI path scan matched: ${fullPath}`, "debug");
-          return fullPath;
-        } catch {
-          // Try next candidate.
-        }
       }
     }
 
