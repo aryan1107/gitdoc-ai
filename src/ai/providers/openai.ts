@@ -138,7 +138,7 @@ ${truncatedDiff}`;
   }
 
   private async execCodex(prompt: string, model?: string): Promise<string> {
-    const args = ["exec"];
+    const args = ["exec", "--skip-git-repo-check"];
     if (model) {
       args.push("--model", model);
     }
@@ -152,12 +152,19 @@ ${truncatedDiff}`;
             )?.uri.fsPath
           : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
+      const codexPath = await this.authManager.getCodexCliPath();
+      if (!codexPath) {
+        throw new Error("ENOENT");
+      }
+      const env = await this.authManager.getCliExecutionEnv();
+
       // CLI needs extra time for process startup, auth check, etc.
       const cliTimeout = Math.max(15000, Math.round(config.aiRequestTimeoutMs * 1.5));
-      const { stdout, stderr } = await execFileAsync("codex", args, {
+      const { stdout, stderr } = await execFileAsync(codexPath, args, {
         cwd,
         maxBuffer: 10 * 1024 * 1024,
         timeout: cliTimeout,
+        env,
       });
       const response = stdout.trim();
       if (!response) {
@@ -165,9 +172,16 @@ ${truncatedDiff}`;
       }
       return normalizeCommitMessage(response);
     } catch (error: any) {
+      // Check if Codex CLI is not installed (ENOENT = command not found)
+      if (error.code === "ENOENT" || error.message === "ENOENT") {
+        throw new Error(
+          "Codex CLI is not installed or not in PATH. Install it from https://openai.com/codex or use an API key instead."
+        );
+      }
+
       const errorMessage = error?.stderr?.toString().trim() || error.message;
       throw new Error(
-        `Codex CLI error: ${errorMessage}. Ensure 'codex login' is complete and Codex CLI is installed.`
+        `Codex CLI error: ${errorMessage}. Ensure 'codex login' is complete.`
       );
     }
   }

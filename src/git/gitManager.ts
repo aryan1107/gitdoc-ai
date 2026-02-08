@@ -241,7 +241,9 @@ export class GitManager implements vscode.Disposable {
           diff = await getStagedDiff(cwd);
           this.log(`Staged diff length: ${diff.length} chars`, "debug");
         } catch (diffError: any) {
-          this.log(`Failed to get staged diff: ${diffError.message}`, "error");
+          const detail = diffError?.message || String(diffError);
+          this.log(`Failed to get staged diff: ${detail}`, "error");
+          throw new Error(`AI-enabled commit aborted: failed to get staged diff: ${detail}`);
         }
       } else {
         this.log("AI is disabled (gitdocAI.ai.enabled=false), using timestamp", "debug");
@@ -249,13 +251,19 @@ export class GitManager implements vscode.Disposable {
 
       // Generate commit message
       let message: string;
-      if (config.aiEnabled && diff) {
+      if (config.aiEnabled) {
+        if (!diff) {
+          throw new Error(
+            "AI-enabled commit aborted: staged diff is empty, so AI commit message could not be generated."
+          );
+        }
         this.log("Requesting AI commit message...");
         try {
           message = await this.aiManager.generateCommitMessage(diff);
           this.log(`AI returned message: "${message}"`, "debug");
         } catch (error: any) {
-          this.log(`AI commit message failed: ${error.message}`, "error");
+          const detail = error?.message || String(error);
+          this.log(`AI commit message failed: ${detail}`, "error");
           this.log("Falling back to timestamp message", "debug");
           message = this.getTimestampMessage();
         }

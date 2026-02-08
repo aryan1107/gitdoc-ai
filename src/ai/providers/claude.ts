@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { execFile } from "child_process";
 import Anthropic from "@anthropic-ai/sdk";
+
 import { AIProvider, AIOptions, AIModelInfo } from "../types";
 import { DEFAULT_CLAUDE_MODEL } from "../../constants";
 import { AuthManager } from "../../auth/authManager";
@@ -156,14 +157,19 @@ ${truncatedDiff}`;
 
       const cliTimeout = Math.max(15000, Math.round(config.aiRequestTimeoutMs * 1.5));
 
+      const claudePath = await this.authManager.getClaudeCliPath();
+      if (!claudePath) {
+        throw new Error("ENOENT");
+      }
+
       // Strip env vars set by the Claude Code VS Code extension that
       // cause the CLI to try SSE communication instead of running standalone
-      const env = { ...process.env };
+      const env = await this.authManager.getCliExecutionEnv();
       delete env.CLAUDE_CODE_SSE_PORT;
       delete env.CLAUDE_CODE_ENTRY_POINT;
 
       const response = await new Promise<string>((resolve, reject) => {
-        const child = execFile("claude", args, {
+        const child = execFile(claudePath, args, {
           cwd,
           maxBuffer: 10 * 1024 * 1024,
           timeout: cliTimeout,
@@ -186,9 +192,16 @@ ${truncatedDiff}`;
 
       return normalizeCommitMessage(response);
     } catch (error: any) {
+      // Check if Claude CLI is not installed (ENOENT = command not found)
+      if (error.code === "ENOENT" || error.message === "ENOENT") {
+        throw new Error(
+          "Claude Code CLI is not installed or not in PATH. Install it from https://claude.ai/download or use an API key instead."
+        );
+      }
+
       const errorMessage = error?.stderr?.toString().trim() || error.message;
       throw new Error(
-        `Claude account login failed via Claude Code CLI: ${errorMessage}. Ensure 'claude' is installed and '/login' is complete.`
+        `Claude account login failed via Claude Code CLI: ${errorMessage}. Ensure '/login' is complete.`
       );
     }
   }

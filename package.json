@@ -1,8 +1,8 @@
 {
   "name": "gitdoc-ai",
-  "displayName": "GitDoc AI",
+  "displayName": "GitDoc AI - Auto Commit with Codex & Claude",
   "description": "Automatically commit/push/pull changes on save with AI-generated commit messages powered by Claude, OpenAI, or Copilot",
-  "version": "0.1.1",
+  "version": "0.1.9",
   "publisher": "AryanChaurasia",
   "icon": "icon.png",
   "license": "MIT",

@@ -29,9 +29,15 @@ export class AIManager implements vscode.Disposable {
     // Pre-flight: verify credentials exist before making API call
     this.log(`Checking if ${provider.name} is available...`);
     const available = await provider.isAvailable();
+    this.log(
+      `Availability result for ${provider.name}: ${available} (provider=${provider.id}, authMethod=${
+        provider.id === "copilot" ? "n/a" : config.getAuthMethodForProvider(provider.id as "claude" | "openai")
+      })`,
+      "debug"
+    );
     if (!available) {
       throw new Error(
-        `${provider.name} credentials not found. Run 'GitDoc AI: Sign In' or 'GitDoc AI: Set API Key' to configure.`
+        `${provider.name} credentials not found. Run 'GitDoc AI: Sign In' or 'GitDoc AI: Set API Key' to configure. See GitDoc AI Output for detailed auth diagnostics.`
       );
     }
 

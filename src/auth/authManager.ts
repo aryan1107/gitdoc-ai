@@ -21,6 +21,8 @@ export class AuthManager implements vscode.Disposable {
   private outputChannel: vscode.OutputChannel;
   private onAuthChangeEmitter = new vscode.EventEmitter<void>();
   private disposables: vscode.Disposable[] = [];
+  private loginShellPathResolved = false;
+  private loginShellPath: string | undefined;
   public onAuthChange = this.onAuthChangeEmitter.event;
 
   constructor(
@@ -138,23 +140,43 @@ export class AuthManager implements vscode.Disposable {
   }
 
   async hasOpenAICodexAuth(): Promise<boolean> {
-    if (await this.getOpenAIOAuthToken()) {
+    this.log("Checking OpenAI login auth via Codex CLI...", "debug");
+    const codexPath = await this.getCodexCliPath();
+    if (!codexPath) {
+      this.log("Codex CLI path could not be resolved; OpenAI login auth unavailable.", "debug");
+      return false;
+    }
+    this.log(`Resolved Codex CLI path: ${codexPath}`, "debug");
+
+    const secretToken = await this.getOpenAIOAuthToken();
+    if (secretToken) {
+      this.log("OpenAI OAuth token found in VS Code SecretStorage.", "debug");
       return true;
     }
+    this.log("No OpenAI OAuth token found in VS Code SecretStorage.", "debug");
 
     const auth = await this.readCodexAuthCache();
-    return !!auth.accessToken || !!auth.apiKey;
+    const hasCacheAuth = !!auth.accessToken || !!auth.apiKey;
+    this.log(
+      `Codex auth cache result: accessToken=${!!auth.accessToken}, apiKey=${!!auth.apiKey}`,
+      "debug"
+    );
+    return hasCacheAuth;
   }
 
   async hasClaudeCodeAuth(): Promise<boolean> {
+    this.log("Checking Claude login auth via Claude Code CLI...", "debug");
     // Check that the CLI is installed AND has evidence of a completed login.
     // We avoid making an actual API call (slow, wastes tokens).
     // Instead, check for ~/.claude/ session artifacts that only exist
     // after a successful /login (settings, statsig cache, session-env).
     if (!(await this.isClaudeInstalled())) {
+      this.log("Claude CLI path could not be resolved; Claude login auth unavailable.", "debug");
       return false;
     }
-    return this.hasClaudeSessionData();
+    const hasSessionData = await this.hasClaudeSessionData();
+    this.log(`Claude session data check result: ${hasSessionData}`, "debug");
+    return hasSessionData;
   }
 
   private async hasClaudeSessionData(): Promise<boolean> {
@@ -168,9 +190,10 @@ export class AuthManager implements vscode.Disposable {
     for (const indicator of indicators) {
       try {
         await fs.access(indicator);
+        this.log(`Claude session indicator found: ${indicator}`, "debug");
         return true;
       } catch {
-        // Try next indicator
+        this.log(`Claude session indicator missing: ${indicator}`, "debug");
       }
     }
     return false;
@@ -277,15 +300,10 @@ export class AuthManager implements vscode.Disposable {
   }
 
   private async signInOpenAIViaCodex(): Promise<boolean> {
-    const imported = await this.importOpenAICredentialsFromCodexCache();
-    if (imported) {
-      vscode.window.showInformationMessage(
-        "OpenAI login detected from Codex. GitDoc AI is ready to use account-based authentication."
-      );
-      return true;
-    }
-
-    if (!(await this.isCodexInstalled())) {
+    this.log("Starting OpenAI sign-in via Codex CLI.", "debug");
+    const codexPath = await this.getCodexCliPath();
+    if (!codexPath) {
+      this.log("Codex CLI was not found before sign-in flow.", "debug");
       const choice = await vscode.window.showWarningMessage(
         "Codex CLI is not installed or not in PATH. Enter an OpenAI API key from platform.openai.com, or install Codex CLI and run 'codex login'.",
         "Enter API Key",
@@ -295,6 +313,15 @@ export class AuthManager implements vscode.Disposable {
         return this.signInOpenAI(true);
       }
       return false;
+    }
+
+    const imported = await this.importOpenAICredentialsFromCodexCache();
+    if (imported) {
+      this.log("OpenAI credentials imported from Codex cache without prompting login.", "debug");
+      vscode.window.showInformationMessage(
+        "OpenAI login detected from Codex. GitDoc AI is ready to use account-based authentication."
+      );
+      return true;
     }
 
     const terminal = vscode.window.createTerminal({
@@ -307,7 +334,8 @@ export class AuthManager implements vscode.Disposable {
       "OpenAI login was not detected. If login did not complete, run 'GitDoc AI: Sign In to AI Provider' again."
     );
     terminal.show();
-    terminal.sendText("codex login", true);
+    this.log(`Launching terminal login command: ${this.quoteForShell(codexPath)} login`, "debug");
+    terminal.sendText(`${this.quoteForShell(codexPath)} login`, true);
 
     vscode.window.showInformationMessage(
       "Complete OpenAI login in the terminal/browser. GitDoc AI will auto-detect completion when the terminal closes."
@@ -359,8 +387,10 @@ export class AuthManager implements vscode.Disposable {
   }
 
   private async importOpenAICredentialsFromCodexCache(): Promise<boolean> {
+    this.log("Attempting to import OpenAI credentials from Codex auth cache.", "debug");
     const auth = await this.readCodexAuthCache();
     if (!auth.apiKey && !auth.accessToken) {
+      this.log("No OpenAI credentials found in Codex auth cache.", "debug");
       return false;
     }
 
@@ -377,25 +407,358 @@ export class AuthManager implements vscode.Disposable {
   }
 
   private async isCodexInstalled(): Promise<boolean> {
+    return !!(await this.getCodexCliPath());
+  }
+
+  async getCodexCliPath(): Promise<string | undefined> {
+    return this.findCliPath("codex");
+  }
+
+  async getClaudeCliPath(): Promise<string | undefined> {
+    return this.findCliPath("claude");
+  }
+
+  async getCliExecutionEnv(): Promise<NodeJS.ProcessEnv> {
+    const loginShellPath = await this.getLoginShellPath();
+    const knownDirs = this.getKnownCliDirs().join(path.delimiter);
+    const mergedPath = this.mergePathValues(
+      process.env.PATH,
+      loginShellPath,
+      knownDirs
+    );
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    if (mergedPath) {
+      env.PATH = mergedPath;
+    }
+
+    this.log(`CLI env PATH source (process.env.PATH): ${process.env.PATH || "(empty)"}`, "debug");
+    this.log(`CLI env PATH source (login shell): ${loginShellPath || "(empty)"}`, "debug");
+    this.log(`CLI env PATH source (known dirs): ${knownDirs || "(empty)"}`, "debug");
+    this.log(`CLI env PATH merged: ${mergedPath || "(empty)"}`, "debug");
+
+    return env;
+  }
+
+  private async findCliPath(command: "codex" | "claude"): Promise<string | undefined> {
+    // Strategy 1: Try the command directly (simplest, works for most users)
+    this.log(`CLI check: trying '${command}' directly`, "debug");
     try {
-      await execFileAsync("codex", ["--version"], {
+      await execFileAsync(command, ["--version"], {
         timeout: AUTH_CLI_TIMEOUT_MS,
       });
-      return true;
-    } catch {
-      return false;
+      this.log(`CLI found: '${command}' works directly`, "debug");
+      return command;
+    } catch (error: any) {
+      if (error?.code !== "ENOENT") {
+        // Command exists but --version failed (maybe old version without --version)
+        // Still usable
+        this.log(`CLI found: '${command}' exists (non-ENOENT error)`, "debug");
+        return command;
+      }
+      this.log(`CLI not in PATH: ${command} (ENOENT)`, "debug");
     }
+
+    // Strategy 2: Try 'which' command (common on macOS/Linux)
+    const fromWhich = await this.findCommandViaWhich(command);
+    if (fromWhich) {
+      this.log(`CLI found via which: ${fromWhich}`, "debug");
+      return fromWhich;
+    }
+
+    // Strategy 3: Scan common installation directories
+    const fromKnownDirs = await this.findInKnownDirs(command);
+    if (fromKnownDirs) {
+      this.log(`CLI found in known dir: ${fromKnownDirs}`, "debug");
+      return fromKnownDirs;
+    }
+
+    this.log(`CLI not found: '${command}'`, "debug");
+    return undefined;
+  }
+
+  private async findCommandViaWhich(
+    command: "codex" | "claude"
+  ): Promise<string | undefined> {
+    if (process.platform === "win32") {
+      this.log(`Skipping 'which' on Windows`, "debug");
+      return undefined;
+    }
+
+    this.log(`Trying 'which ${command}'`, "debug");
+    try {
+      const { stdout } = await execFileAsync("which", [command], {
+        timeout: AUTH_CLI_TIMEOUT_MS,
+      });
+      const path = stdout.trim();
+      this.log(`'which ${command}' returned: ${path || "(empty)"}`, "debug");
+      if (path && path.length > 0) {
+        return path;
+      }
+    } catch (error: any) {
+      this.log(`'which ${command}' failed: ${error?.code || error?.message || "unknown"}`, "debug");
+    }
+    return undefined;
+  }
+
+  private async findInKnownDirs(
+    command: "codex" | "claude"
+  ): Promise<string | undefined> {
+    const candidates = this.getCommandCandidates(command);
+    const knownDirs = this.getKnownCliDirs();
+
+    // Add nvm version directories dynamically
+    const nvmDirs = await this.getNvmNodeBinDirs();
+    const allDirs = [...knownDirs, ...nvmDirs];
+
+    this.log(`Scanning ${allDirs.length} known directories for '${command}'`, "debug");
+
+    for (const dir of allDirs) {
+      for (const candidate of candidates) {
+        const fullPath = path.join(dir, candidate);
+        try {
+          await fs.access(fullPath);
+          this.log(`Found '${command}' at: ${fullPath}`, "debug");
+          return fullPath;
+        } catch {
+          // Not found, try next
+        }
+      }
+    }
+
+    this.log(`'${command}' not found in any known directory`, "debug");
+    return undefined;
+  }
+
+  private async getNvmNodeBinDirs(): Promise<string[]> {
+    const dirs: string[] = [];
+    const home = os.homedir();
+    const nvmDir = process.env.NVM_DIR || path.join(home, ".nvm");
+    const versionsDir = path.join(nvmDir, "versions", "node");
+
+    try {
+      const versions = await fs.readdir(versionsDir);
+      for (const version of versions) {
+        dirs.push(path.join(versionsDir, version, "bin"));
+      }
+      this.log(`Found ${dirs.length} nvm node versions`, "debug");
+    } catch {
+      // nvm not present or no versions installed
+    }
+
+    return dirs;
+  }
+
+  private async getLoginShellPath(): Promise<string | undefined> {
+    if (this.loginShellPathResolved) {
+      return this.loginShellPath;
+    }
+    this.loginShellPathResolved = true;
+
+    if (process.platform === "win32") {
+      return undefined;
+    }
+
+    const shells = Array.from(
+      new Set(
+        [process.env.SHELL, "/bin/zsh", "/bin/bash", "/bin/sh"].filter(
+          (value): value is string => typeof value === "string" && value.trim().length > 0
+        )
+      )
+    );
+
+    for (const shellPath of shells) {
+      this.log(`CLI PATH probe command: ${shellPath} -lc "printf %s \\\"$PATH\\\""`,"debug");
+      try {
+        const { stdout } = await execFileAsync(shellPath, ["-lc", "printf %s \"$PATH\""], {
+          timeout: AUTH_CLI_TIMEOUT_MS,
+        });
+        const resolvedPath = stdout.trim();
+        this.log(
+          `CLI PATH probe result (${shellPath}): ${resolvedPath || "(empty)"}`,
+          "debug"
+        );
+        if (resolvedPath.length > 0) {
+          this.loginShellPath = resolvedPath;
+          return this.loginShellPath;
+        }
+      } catch (error: any) {
+        this.log(
+          `CLI PATH probe failed (${shellPath}): ${this.formatExecError(error)}`,
+          "debug"
+        );
+      }
+    }
+
+    return undefined;
+  }
+
+  private async findCommandViaShell(
+    command: "codex" | "claude"
+  ): Promise<string | undefined> {
+    if (process.platform === "win32") {
+      return undefined;
+    }
+
+    const shells = Array.from(
+      new Set(
+        [process.env.SHELL, "/bin/zsh", "/bin/bash", "/bin/sh"].filter(
+          (value): value is string => typeof value === "string" && value.trim().length > 0
+        )
+      )
+    );
+
+    for (const shellPath of shells) {
+      const lookupCommand = `command -v ${command}`;
+      this.log(`CLI shell lookup command: ${shellPath} -lc "${lookupCommand}"`, "debug");
+      try {
+        const { stdout } = await execFileAsync(
+          shellPath,
+          ["-lc", lookupCommand],
+          { timeout: AUTH_CLI_TIMEOUT_MS }
+        );
+        this.log(
+          `CLI shell lookup stdout (${shellPath}): ${this.toSingleLine(stdout) || "(empty)"}`,
+          "debug"
+        );
+        const candidate = stdout.trim().split(/\r?\n/).pop()?.trim();
+        if (candidate && (path.isAbsolute(candidate) || candidate === command)) {
+          if (candidate === command) {
+            this.log(
+              `CLI shell lookup returned bare command '${command}', accepting as resolved.`,
+              "debug"
+            );
+            return command;
+          }
+          try {
+            await fs.access(candidate);
+            this.log(`CLI shell lookup resolved executable path: ${candidate}`, "debug");
+            return candidate;
+          } catch {
+            this.log(`CLI shell lookup candidate is not accessible: ${candidate}`, "debug");
+          }
+        }
+      } catch (error: any) {
+        this.log(
+          `CLI shell lookup failed (${shellPath}): ${this.formatExecError(error)}`,
+          "debug"
+        );
+      }
+    }
+
+    return undefined;
+  }
+
+  private async findInPath(
+    command: "codex" | "claude",
+    pathValue: string | undefined
+  ): Promise<string | undefined> {
+    const pathEntries = this.splitPath(pathValue);
+    const commandCandidates = this.getCommandCandidates(command);
+    this.log(
+      `CLI path scan for '${command}': entries=${pathEntries.length}, candidates=${commandCandidates.join(",")}`,
+      "debug"
+    );
+
+    for (const dir of pathEntries) {
+      for (const candidate of commandCandidates) {
+        const fullPath = path.join(dir, candidate);
+        try {
+          await fs.access(fullPath);
+          this.log(`CLI path scan matched: ${fullPath}`, "debug");
+          return fullPath;
+        } catch {
+          // Try next candidate.
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private getKnownCliDirs(): string[] {
+    const home = os.homedir();
+    const dirs = [
+      "/usr/local/bin",
+      "/opt/homebrew/bin",
+      path.join(home, "homebrew", "bin"),
+      path.join(home, ".local", "bin"),
+      path.join(home, ".npm-global", "bin"),
+      path.join(home, ".npm", "bin"),
+      path.join(home, ".volta", "bin"),
+      path.join(home, "bin"),
+    ];
+
+    // Add npm global prefix if configured
+    const npmPrefix = process.env.npm_config_prefix;
+    if (npmPrefix) {
+      dirs.push(path.join(npmPrefix, "bin"));
+    }
+
+    // Add nvm (Node Version Manager) paths
+    const nvmBin = process.env.NVM_BIN;
+    if (nvmBin) {
+      dirs.push(nvmBin);
+    }
+
+    // Also check default nvm location even if NVM_BIN isn't set
+    const nvmDir = process.env.NVM_DIR || path.join(home, ".nvm");
+    try {
+      const versionsDir = path.join(nvmDir, "versions", "node");
+      // We can't synchronously read directory here, but add common paths
+      // The actual scanning will happen in findInKnownDirs
+      dirs.push(path.join(nvmDir, "current", "bin"));
+    } catch {
+      // Ignore if nvm not present
+    }
+
+    return dirs;
+  }
+
+  private splitPath(pathValue: string | undefined): string[] {
+    if (!pathValue) {
+      return [];
+    }
+    const entries = pathValue
+      .split(path.delimiter)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    return Array.from(new Set(entries));
+  }
+
+  private mergePathValues(...values: Array<string | undefined>): string {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+
+    for (const value of values) {
+      for (const entry of this.splitPath(value)) {
+        if (seen.has(entry)) {
+          continue;
+        }
+        seen.add(entry);
+        merged.push(entry);
+      }
+    }
+
+    return merged.join(path.delimiter);
+  }
+
+  private getCommandCandidates(command: "codex" | "claude"): string[] {
+    if (process.platform !== "win32") {
+      return [command];
+    }
+
+    return [`${command}.exe`, `${command}.cmd`, `${command}.bat`, command];
+  }
+
+  private quoteForShell(value: string): string {
+    if (/^[A-Za-z0-9_./:-]+$/.test(value)) {
+      return value;
+    }
+    return `'${value.replace(/'/g, `'\\''`)}'`;
   }
 
   private async isClaudeInstalled(): Promise<boolean> {
-    try {
-      await execFileAsync("claude", ["--version"], {
-        timeout: AUTH_CLI_TIMEOUT_MS,
-      });
-      return true;
-    } catch {
-      return false;
-    }
+    return !!(await this.getClaudeCliPath());
   }
 
   private getCodexAuthPath(): string {
@@ -407,8 +770,10 @@ export class AuthManager implements vscode.Disposable {
     apiKey?: string;
     accessToken?: string;
   }> {
+    const authPath = this.getCodexAuthPath();
+    this.log(`Reading Codex auth cache: ${authPath}`, "debug");
     try {
-      const raw = await fs.readFile(this.getCodexAuthPath(), "utf8");
+      const raw = await fs.readFile(authPath, "utf8");
       const json = JSON.parse(raw) as Record<string, unknown>;
       const apiKey =
         this.getStringAtPath(json, ["api_key"]) ||
@@ -425,7 +790,11 @@ export class AuthManager implements vscode.Disposable {
         apiKey,
         accessToken,
       };
-    } catch {
+    } catch (error: any) {
+      this.log(
+        `Failed reading Codex auth cache at ${authPath}: ${this.formatExecError(error)}`,
+        "debug"
+      );
       return {};
     }
   }
@@ -485,11 +854,30 @@ export class AuthManager implements vscode.Disposable {
     }
   }
 
-  private log(message: string): void {
-    if (!this.shouldLog("info")) {
+  private toSingleLine(value: unknown): string {
+    if (typeof value !== "string") {
+      return "";
+    }
+    return value.replace(/\s+/g, " ").trim();
+  }
+
+  private formatExecError(error: any): string {
+    const code = error?.code ? `code=${String(error.code)}` : "code=(none)";
+    const message = error?.message ? `message=${String(error.message)}` : `message=${String(error)}`;
+    const stdout = this.toSingleLine(
+      typeof error?.stdout === "string" ? error.stdout : error?.stdout?.toString?.()
+    );
+    const stderr = this.toSingleLine(
+      typeof error?.stderr === "string" ? error.stderr : error?.stderr?.toString?.()
+    );
+    return `${code}; ${message}; stdout=${stdout || "(empty)"}; stderr=${stderr || "(empty)"}`;
+  }
+
+  private log(message: string, level: "error" | "info" | "debug" = "info"): void {
+    if (!this.shouldLog(level)) {
       return;
     }
-    this.outputChannel.appendLine(`[Auth] ${message}`);
+    this.outputChannel.appendLine(`[Auth] [${level.toUpperCase()}] ${message}`);
   }
 
   private shouldLog(level: "error" | "info" | "debug"): boolean {
