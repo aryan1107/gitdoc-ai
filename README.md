@@ -67,7 +67,7 @@ Automatically commit, push, and pull changes on save with AI-generated commit me
 | `gitdocAI.autoCommitDelay` | `30000` | Delay (ms) before auto-committing |
 | `gitdocAI.autoPush` | `onCommit` | When to auto-push (`onCommit`, `afterDelay`, `off`) |
 | `gitdocAI.autoPull` | `onPush` | When to auto-pull (`onPush`, `afterDelay`, `off`) |
-| `gitdocAI.filePattern` | `**/*` | Glob pattern for files to auto-commit |
+| `gitdocAI.filePattern` | `**/*` | Glob pattern used when auto-staging changed files |
 | `gitdocAI.excludeBranches` | `[]` | Branches to exclude from auto-commits |
 
 ### AI Commit Message Settings
@@ -79,12 +79,18 @@ Automatically commit, push, and pull changes on save with AI-generated commit me
 | `gitdocAI.ai.diffContextDepth` | `0` | Include last N commits for context (0, 1, 2, 5, or 10) |
 | `gitdocAI.ai.retryAttempts` | `1` | Number of AI retry attempts before fallback (1-5) |
 | `gitdocAI.ai.retryDelayMs` | `2000` | Delay between retries in milliseconds |
+| `gitdocAI.ai.fallbackToTimestampOnFailure` | `true` | Use timestamp message if AI fails after all retries (disable to abort commit instead) |
 
 ### Auto-Commit Thresholds
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `gitdocAI.autoCommit.minFilesChanged` | `1` | Minimum files changed to trigger commit |
 | `gitdocAI.autoCommit.minLinesChanged` | `1` | Minimum lines changed to trigger commit |
+| `gitdocAI.autoCommit.skipThresholdsForPreStaged` | `true` | Skip threshold checks when files were already staged before auto-commit runs |
+
+Behavior notes:
+- If files are already staged, saving any file triggers commit for the currently staged changes.
+- By default, pre-staged files bypass threshold checks. Disable `skipThresholdsForPreStaged` to enforce thresholds against all staged files.
 
 ### Notifications
 | Setting | Default | Description |

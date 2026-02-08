@@ -492,7 +492,7 @@
           "default": 1,
           "minimum": 1,
           "maximum": 5,
-          "description": "Number of times to retry AI commit message generation before falling back to timestamp. Minimum 1 (no retries), maximum 5."
+          "description": "Number of times to retry AI commit message generation. Minimum 1 (no retries), maximum 5."
         },
         "gitdocAI.ai.retryDelayMs": {
           "type": "number",
@@ -500,6 +500,11 @@
           "minimum": 1000,
           "maximum": 10000,
           "description": "Delay in milliseconds between AI retry attempts. Minimum 1000ms (1 second), maximum 10000ms (10 seconds)."
+        },
+        "gitdocAI.ai.fallbackToTimestampOnFailure": {
+          "type": "boolean",
+          "default": true,
+          "description": "When AI commit message generation fails after all retries, fall back to timestamp commit message. If false, commit is aborted."
         },
         "gitdocAI.autoCommit.minFilesChanged": {
           "type": "number",
@@ -514,6 +519,11 @@
           "minimum": 1,
           "maximum": 1000,
           "description": "Minimum number of lines (added + deleted) that must be changed before auto-committing. Set to 1 to commit any change."
+        },
+        "gitdocAI.autoCommit.skipThresholdsForPreStaged": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, when files are already staged before auto-commit runs, minFilesChanged and minLinesChanged checks are skipped."
         },
         "gitdocAI.notifications.onCommitSuccess": {
           "type": "boolean",

@@ -93,6 +93,11 @@ export async function getStagedDiff(cwd: string): Promise<string> {
   return stdout;
 }
 
+export async function getStagedFiles(cwd: string): Promise<string[]> {
+  const { stdout } = await execGit(["diff", "--cached", "--name-only", "-z"], cwd);
+  return stdout.split("\0").filter((entry) => entry.length > 0);
+}
+
 export async function getUnstagedDiff(cwd: string): Promise<string> {
   const { stdout } = await execGit(["diff"], cwd);
   return stdout;
@@ -144,10 +149,17 @@ export async function hasChanges(cwd: string): Promise<boolean> {
   return stdout.trim().length > 0;
 }
 
-export async function getChangeStats(cwd: string): Promise<{ filesChanged: number; linesChanged: number }> {
+export async function getChangeStats(
+  cwd: string,
+  scopedFiles?: string[]
+): Promise<{ filesChanged: number; linesChanged: number }> {
   try {
     // Get numstat for staged changes
-    const { stdout } = await execGit(["diff", "--cached", "--numstat"], cwd);
+    const args = ["diff", "--cached", "--numstat"];
+    if (scopedFiles && scopedFiles.length > 0) {
+      args.push("--", ...scopedFiles);
+    }
+    const { stdout } = await execGit(args, cwd);
 
     const lines = stdout.trim().split("\n").filter(line => line);
     const filesChanged = lines.length;

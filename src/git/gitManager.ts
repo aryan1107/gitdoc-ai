@@ -10,7 +10,7 @@ import {
   getCurrentBranch,
   hasRemote,
   hasUpstream,
-  getStagedDiff,
+  getStagedFiles,
   getStagedDiffWithContext,
   getChangedFiles,
   getChangeStats,
@@ -113,7 +113,14 @@ export class GitManager implements vscode.Disposable {
     // Check if file matches the configured pattern
     const relativePath = vscode.workspace.asRelativePath(document.uri);
     if (!minimatch(relativePath, config.filePattern)) {
-      return;
+      const stagedFiles = await getStagedFiles(cwd);
+      if (stagedFiles.length === 0) {
+        return;
+      }
+      this.log(
+        `Saved file '${relativePath}' does not match filePattern, but ${stagedFiles.length} staged file(s) exist; continuing auto-commit.`,
+        "debug"
+      );
     }
 
     // Check if current branch is excluded
@@ -179,11 +186,12 @@ export class GitManager implements vscode.Disposable {
       // Stage all matching changes
       const changedFiles = await getChangedFiles(cwd);
       this.log(`Changed files (${changedFiles.length}): ${changedFiles.join(", ")}`, "debug");
+      const stagedBeforeSet = new Set(await getStagedFiles(cwd));
       const matchingFiles = changedFiles.filter((f) =>
         minimatch(f, config.filePattern)
       );
 
-      if (matchingFiles.length === 0) {
+      if (matchingFiles.length === 0 && stagedBeforeSet.size === 0) {
         this.log("No matching files to commit");
         this.onStatusChangeEmitter.fire("enabled");
         return false;
@@ -191,14 +199,23 @@ export class GitManager implements vscode.Disposable {
 
       this.log(`Staging ${matchingFiles.length} file(s)...`, "debug");
 
-      // Stage the matching files and track what we staged
-      const stagedFiles: string[] = [];
+      // Start with files that were already staged before this run.
+      const stagedFiles: string[] = Array.from(stagedBeforeSet);
       for (const file of matchingFiles) {
         const normalizedPath = this.normalizeGitPath(file, cwd);
         if (!normalizedPath) {
           this.log(`Skipping non-repo path: ${file}`, "debug");
           continue;
         }
+
+        if (stagedBeforeSet.has(normalizedPath)) {
+          this.log(
+            `File already staged before auto-commit; preserving staged content: ${normalizedPath}`,
+            "debug"
+          );
+          continue;
+        }
+
         try {
           await execGit(["add", "--", normalizedPath], cwd);
           stagedFiles.push(normalizedPath);
@@ -235,37 +252,49 @@ export class GitManager implements vscode.Disposable {
         return false;
       }
 
-      // Check minimum change threshold
-      const stats = await getChangeStats(cwd);
+      const newlyStagedFiles = stagedFiles.filter((file) => !stagedBeforeSet.has(file));
+
       const minFiles = config.minFilesChanged;
       const minLines = config.minLinesChanged;
+      const hasPreStagedFiles = stagedBeforeSet.size > 0;
+      const skipThresholdsForPreStaged =
+        hasPreStagedFiles && config.skipThresholdsForPreStaged;
 
-      if (stats.filesChanged < minFiles) {
+      if (skipThresholdsForPreStaged) {
         this.log(
-          `Skipping commit: only ${stats.filesChanged} file(s) changed (minimum: ${minFiles})`,
+          `Detected ${stagedBeforeSet.size} file(s) already staged before auto-commit; skipping minimum threshold checks.`,
           "debug"
         );
-        // Unstage only the files we just staged (not user's manual staging)
-        await this.unstageFiles(stagedFiles, cwd);
-        this.onStatusChangeEmitter.fire("enabled");
-        return false;
-      }
-
-      if (stats.linesChanged < minLines) {
+      } else {
+        const thresholdScopeFiles = hasPreStagedFiles ? stagedFiles : newlyStagedFiles;
+        const stats = await getChangeStats(cwd, thresholdScopeFiles);
         this.log(
-          `Skipping commit: only ${stats.linesChanged} line(s) changed (minimum: ${minLines})`,
+          `Change stats: ${stats.filesChanged} file(s), ${stats.linesChanged} line(s)`,
           "debug"
         );
-        // Unstage only the files we just staged (not user's manual staging)
-        await this.unstageFiles(stagedFiles, cwd);
-        this.onStatusChangeEmitter.fire("enabled");
-        return false;
-      }
 
-      this.log(
-        `Change stats: ${stats.filesChanged} file(s), ${stats.linesChanged} line(s)`,
-        "debug"
-      );
+        if (stats.filesChanged < minFiles) {
+          this.log(
+            `Skipping commit: only ${stats.filesChanged} file(s) changed (minimum: ${minFiles})`,
+            "debug"
+          );
+          // Unstage only files newly staged by this run.
+          await this.unstageFiles(newlyStagedFiles, cwd);
+          this.onStatusChangeEmitter.fire("enabled");
+          return false;
+        }
+
+        if (stats.linesChanged < minLines) {
+          this.log(
+            `Skipping commit: only ${stats.linesChanged} line(s) changed (minimum: ${minLines})`,
+            "debug"
+          );
+          // Unstage only files newly staged by this run.
+          await this.unstageFiles(newlyStagedFiles, cwd);
+          this.onStatusChangeEmitter.fire("enabled");
+          return false;
+        }
+      }
 
       // Get staged diff after staging so newly added files are included.
       let diff = "";
@@ -303,6 +332,11 @@ export class GitManager implements vscode.Disposable {
 
       message = normalizeCommitMessage(message);
       if (!message) {
+        if (config.aiEnabled && !config.aiFallbackToTimestampOnFailure) {
+          throw new Error(
+            "AI-enabled commit aborted: generated commit message is empty after normalization."
+          );
+        }
         this.log("Commit message is empty after normalization, using timestamp", "info");
         message = this.getTimestampMessage();
       }
@@ -564,7 +598,12 @@ export class GitManager implements vscode.Disposable {
       }
     }
 
-    // All attempts failed, fall back to timestamp
+    if (!config.aiFallbackToTimestampOnFailure) {
+      throw new Error(
+        `AI commit message generation failed after ${maxAttempts} attempt(s).`
+      );
+    }
+
     this.log(
       `All ${maxAttempts} AI attempts failed. Falling back to timestamp message.`,
       "error"
@@ -620,11 +659,14 @@ export class GitManager implements vscode.Disposable {
         try {
           await execGit(["rm", "--cached", "--", ...files], cwd);
           this.log(`Unstaged ${files.length} file(s) via rm --cached`, "debug");
-        } catch (rmError) {
-          this.log(`Failed to unstage files: ${rmError}`, "error");
+        } catch (rmError: any) {
+          const rmMessage = rmError?.message || String(rmError);
+          this.log(`Failed to unstage files via rm --cached: ${rmMessage}`, "error");
+          throw new Error(`Failed to unstage files via rm --cached: ${rmMessage}`);
         }
       } else {
         this.log(`Failed to unstage files: ${message}`, "error");
+        throw new Error(`Failed to unstage files: ${message}`);
       }
     }
   }

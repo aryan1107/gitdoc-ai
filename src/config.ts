@@ -169,12 +169,23 @@ export const config = {
     return getConfig().get<number>("autoCommit.minLinesChanged", 1);
   },
 
+  get skipThresholdsForPreStaged(): boolean {
+    return getConfig().get<boolean>(
+      "autoCommit.skipThresholdsForPreStaged",
+      true
+    );
+  },
+
   get retryAttempts(): number {
     return getConfig().get<number>("ai.retryAttempts", 1);
   },
 
   get retryDelayMs(): number {
     return getConfig().get<number>("ai.retryDelayMs", 2000);
+  },
+
+  get aiFallbackToTimestampOnFailure(): boolean {
+    return getConfig().get<boolean>("ai.fallbackToTimestampOnFailure", true);
   },
 
   get notifyOnCommitSuccess(): boolean {
